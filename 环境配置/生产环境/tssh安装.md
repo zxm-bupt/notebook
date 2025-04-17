@@ -8,7 +8,7 @@ go install github.com/trzsz/trzsz-ssh/cmd/tssh@latest
 
 在环境变量中将GOPATH导入环境变量
 
-![Imgur](https://i.imgur.com/yfAwWuH.png)
+![Imgur](http://123.57.190.49:12121/api/image/F620R6X6.png)
 
 # 3. 安装trzsz
 

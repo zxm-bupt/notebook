@@ -18,7 +18,7 @@ Tun虚拟设备和物理网卡的区别是Tun虚拟设备是IP层设备，从/de
 
 下图描述了Tap/Tun的工作原理：
 
-![Imgur](https://i.imgur.com/IDyiHHr.png)
+![Imgur](http://123.57.190.49:12121/api/image/80ZZ6LZF.png)
 
 
 
@@ -26,17 +26,17 @@ Tun虚拟设备和物理网卡的区别是Tun虚拟设备是IP层设备，从/de
 
 通过应用程序从/dev/net/tun字符设备中读取或者写入数据看上去并没有太大用处，但通过将Tun/Tap结合物理网络设备使用,我们可以创建一个点对点的隧道。如下图所示，左边主机上应用程序发送到Tun虚拟设备上的IP数据包被VPN程序通过字符设备接收，然后再通过一个TCP或者UDP隧道发送到右端的VPN服务器上，VPN服务器将隧道负载中的原始IP数据包写入字符设备，这些IP包就会出现在右侧的Tun虚拟设备上，最后通过操作系统协议栈和socket接口发送到右侧的应用程序上。
 
-![Imgur](https://i.imgur.com/fqexy9h.png)
+![Imgur](http://123.57.190.49:12121/api/image/F86P6248.png)
 
 上图中的隧道也可以采用Tap虚拟设备实现。使用Tap的话，隧道的负载将是以太数据帧而不是IP数据包，而且还会传递ARP等广播数据包。
 
-![Imgur](https://i.imgur.com/NnFagBE.png)
+![Imgur](http://123.57.190.49:12121/api/image/NB42D64V.png)
 
 # 使用Tun/Tap隧道绕过防火墙
 
 结合路由规则和IPTables规则，可以将VPN服务器端的主机作为连接外部网络的网关，以绕过防火墙对客户端的一些外部网络访问限制。如下图所示，防火墙规则允许客户端访问主机IP2，而禁止访问其他Internet上的节点。通过采用Tun隧道，从防火墙角度只能看到被封装后的数据包，因此防火墙认为客户端只是在访问IP2，会对数据进行放行。而VPN服务端在解包得到真实的访问目的后，会通过路由规则和IPTables规则将请求转发到真正的访问目的地上，然后再将真实目的地的响应IP数据包封装进隧道后原路返回给客户端，从而达到绕过防火墙限制的目的。
 
-![Imgur](https://i.imgur.com/MFgolRN.png)
+![Imgur](http://123.57.190.49:12121/api/image/6Z28ZD26.png)
 
 # 使用Tap隧道桥接两个远程站点
 
@@ -44,7 +44,7 @@ Tun虚拟设备和物理网卡的区别是Tun虚拟设备是IP层设备，从/de
 
 VPN主机上有两个物理网卡，其中Eth0用于和对方站点的VPN主机进行通信，建立隧道。Eth1在通过网线连接到以太网交换机的同时也被则加入了Linux Bridge，这相当于用一条网线将Linux Bridge上的一个端口（Eth1）连接到了本地站点的以太网交换机上，Eth1上收到的所有数据包都会被发送到Linux Bridge上，Linux Bridge发给Eth1的数据包也会被发送到以太网交换机上。Linux Bridge上还有一个Tap虚拟网卡，用于VPN程序接收从Linux Bridge上收到的数据包。
 
-![Imgur](https://i.imgur.com/q0Fu1va.png)
+![Imgur](http://123.57.190.49:12121/api/image/28JZL4H2.png)
 
 
 
@@ -64,7 +64,7 @@ VPN主机上有两个物理网卡，其中Eth0用于和对方站点的VPN主机�
 
 从站点主机的角度来看，上面图中两个VPN主机之间的远程连接可以看作一条虚拟的网线，这条网线将两个Linux Bridge连接起来。这两个Linux Bridge和两个以太网交换机一起将左右两个站点的主机连接在一起，形成了一个局域网。
 
-![Imgur](https://i.imgur.com/bFdgopv.png)
+![Imgur](http://123.57.190.49:12121/api/image/002VXJV6.png)
 
 # 参考资料
 

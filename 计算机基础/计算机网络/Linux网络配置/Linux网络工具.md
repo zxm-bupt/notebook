@@ -1,8 +1,8 @@
-众所周知的，linux的网络配置有很多工具，例如NetManager、Netplan等等，他们千奇百怪。在这做一个整理。
+众所周知的，linux的网络配置有很多工具，例如NetworkManager、Netplan等等，他们千奇百怪。在这做一个整理。
 
 # 1.工具的分层
 
-![Imgur](https://i.imgur.com/R6x9hkr.png)
+<img title="" src="http://123.57.190.49:12121/api/image/PNPPJ6NJ.png" alt="Imgur" data-align="inline">
 
 linux的网络底层是Linux网络子系统，Linux网络子系统核心组件包括:
 

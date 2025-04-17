@@ -10,7 +10,7 @@ Underlay网络正如其名，是Overlay网络的底层物理基础。
 
 如下图所示，Underlay网络可以是由多个类型设备互联而成的物理网络，负责网络之间的数据包传输。
 
-![Imgur](https://i.imgur.com/fSJMntU.png)
+![Imgur](http://123.57.190.49:12121/api/image/P08LZTP2.png)
 
 在Underlay网络中，互联的设备可以是各类型交换机、路由器、负载均衡设备、防火墙等，但网络的各个设备之间必须通过路由协议来确保之间IP的连通性。
 
@@ -28,7 +28,7 @@ Underlay网络可以是二层也可以是三层网络。其中二层网络通常
 
 为了摆脱Underlay网络的种种限制，现在多采用网络虚拟化技术在Underlay网络之上创建虚拟的Overlay网络。
 
-![Imgur](https://i.imgur.com/nwXJM6H.png)
+![Imgur](http://123.57.190.49:12121/api/image/24Z0BPHF.png)
 
 在Overlay网络中，设备之间可以通过逻辑链路，按照需求完成互联形成Overlay拓扑。
 
