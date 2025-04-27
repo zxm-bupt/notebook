@@ -40,8 +40,6 @@ SRv6技术作为一种基于IPv6网络的源路由技术，相较于传统网络
 
 <img src="http://123.57.190.49:12121/api/image/4LB6R24Z.png" title="" alt="SID" data-align="center">
 
-
-
 ## 4.1 基于SID的路径编程
 
 <img src="http://123.57.190.49:12121/api/image/PHDJV24D.png" title="" alt="SRH结构" data-align="center">
@@ -94,9 +92,7 @@ SRv6 TE Policy的工作机制也拆分为路由发布流程和数据转发流程
 
 以IPv4 L3VPN over SRv6 TE Policy为例，节点A和节点D分别作为SRv6 TE Policy的源节点和尾节点，同时作为PE设备，分别连接了属于VPN实例VPNA的CE设备。SRv6 TE Policy的Endpoint为节点D的Loopback口地址4::4，SRv6 TE Policy的Color属性为10，SRv6 TE Policy中仅存在一条候选路径且候选路径中只有一条SID List，即<2001:A::1,2001:B::1,2001:C::1>。路由发布的过程如下：
 
-(1) 网络中的节点A、节点B、节点C和节点D通过IGP互相发布本地的SRv6 Locator D。此时，网
-
-。
+(1) 网络中的节点A、节点B、节点C和节点D通过IGP互相发布本地的SRv6 Locator D。
 
 (2) 节点A和节点D建立了MP-BGP邻居，尾节点D通过BGP为VPN实例中的私网路由X分配SRv6 SID 2001:D::1，该SRv6 SID属于SRv6 Locator D范围。
 

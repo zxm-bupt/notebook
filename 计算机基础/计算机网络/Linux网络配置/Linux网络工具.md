@@ -4,7 +4,7 @@
 
 # 1.工具的分层
 
-<img title="" src="http://123.57.190.49:12121/api/image/PNPPJ6NJ.png" alt="Imgur" data-align="inline">
+![](http://123.57.190.49:12121/api/image/PNPPJ6NJ.png)
 
 linux的网络底层是Linux网络子系统，Linux网络子系统核心组件包括:
 
