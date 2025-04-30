@@ -375,4 +375,464 @@ uint(0) = 00000000...00000000 (全 0)
 ^uint(0) >> 1  = 01111111...11111111 (最高位变为 0)
 ```
 
+---
+
+# go的泛型(模板)
+
+> 如果你经常要分别为不同的类型写完全相同逻辑的代码，那么使用泛型将是最合适的选择
+
+
+
+## 1. 类型形参、类型实参、类型约束和泛型类型
+
+```go
+type Slice[T int|float32|float64 ] []T
+```
+
+不同于一般的类型定义，这里类型名称 Slice 后带了中括号，对各个部分做一个解说就是：
+
+* T 就是上面介绍过的**类型形参(Type parameter)**，在定义Slice类型的时候 T 代表的具体类型并不确定，类似一个占位符
+
+* int|float32|float64 这部分被称为**类型约束(Type constraint)**，中间的 | 的意思是告诉编译器，类型形参 T 只可以接收 int 或 float32 或 float64 这三种类型的实参
+
+* 中括号里的 T int|float32|float64 这一整串因为定义了所有的类型形参(在这个例子里只有一个类型形参T），所以我们称其为**类型形参列表(type parameter list)**
+
+* 这里新定义的类型名称叫 Slice[T]
+
+泛型类型不能直接拿来使用，必须传入**类型实参(Type argument)** 将其确定为具体的类型之后才可使用。而传入类型实参确定具体类型的操作被称为 **实例化(Instantiations)** :
+
+```go
+// 这里传入了类型实参int，泛型类型Slice[T]被实例化为具体的类型 Slice[int]
+var a Slice[int] = []int{1, 2, 3}  
+fmt.Printf("Type Name: %T",a)  //输出：Type Name: Slice[int]
+
+// 传入类型实参float32, 将泛型类型Slice[T]实例化为具体的类型 Slice[string]
+var b Slice[float32] = []float32{1.0, 2.0, 3.0} 
+fmt.Printf("Type Name: %T",b)  //输出：Type Name: Slice[float32]
+
+// ✗ 错误。因为变量a的类型为Slice[int]，b的类型为Slice[float32]，两者类型不同
+a = b  
+
+// ✗ 错误。string不在类型约束 int|float32|float64 中，不能用来实例化泛型类型
+var c Slice[string] = []string{"Hello", "World"} 
+
+// ✗ 错误。Slice[T]是泛型类型，不可直接使用必须实例化为具体的类型
+var x Slice[T] = []int{1, 2, 3} 
+```
+
+对于上面的例子，我们先给泛型类型 `Slice[T]` 传入了类型实参 `int` ，这样泛型类型就被实例化为了具体类型 `Slice[int]`
+
+上面只是个最简单的例子，实际上类型形参的数量可以远远不止一个，如下：
+
+```go
+// MyMap类型定义了两个类型形参 KEY 和 VALUE。分别为两个形参指定了不同的类型约束
+// 这个泛型类型的名字叫： MyMap[KEY, VALUE]
+type MyMap[KEY int | string, VALUE float32 | float64] map[KEY]VALUE  
+
+// 用类型实参 string 和 flaot64 替换了类型形参 KEY 、 VALUE，泛型类型被实例化为具体的类型：MyMap[string, float64]
+var a MyMap[string, float64] = map[string]float64{
+    "jack_score": 9.6,
+    "bob_score":  8.4,
+}
+```
+
+关于类型形参、类型约束、类型形参列表、类型实参可以参照下图的概括：
+
+![](http://123.57.190.49:12121/api/image/2J2J86J0.jpg)
+
+关于泛型的基本概念还有以下一些在语法上需要注意的地方：
+
+* 所有类型定义都可使用类型形参，所以下面这种结构体以及接口的定义也可以使用类型形参：
+  
+  ```go
+  // 一个泛型类型的结构体。可用 int 或 sring 类型实例化
+  type MyStruct[T int | string] struct {  
+      Name string
+      Data T
+  }
+  
+  // 一个泛型接口(关于泛型接口在后半部分会详细讲解）
+  type IPrintData[T int | float32 | string] interface {
+      Print(data T)
+  }
+  
+  // 一个泛型通道，可用类型实参 int 或 string 实例化
+  type MyChan[T int | string] chan T
+  ```
+
+* 类型形参是可以互相套用的，如下
+  
+  ```go
+  type WowStruct[T int | float32, S []T] struct {
+      Data     S
+      MaxValue T
+      MinValue T
+  }
+  ```
+  
+  这个例子看起来有点复杂且难以理解，但实际上只要记住一点：任何泛型类型都必须传入类型实参实例化才可以使用。
+  因为 S 的定义是 []T ，所以 T 一定决定了的话 S 的实参就不能随便乱传了，下面这样的代码是错误的：
+  
+  ```go
+  // 错误。S的定义是[]T，这里T传入了实参int, 所以S的实参应当为 []int 而不能是 []float32
+  ws := WowStruct[int, []float32]{
+          Data:     []float32{1.0, 2.0, 3.0},
+          MaxValue: 3,
+          MinValue: 1,
+      }
+  ```
+
+* 定义泛型类型的时候，**基础类型不能只有类型形参**，如下：
+  
+  ```go
+  type MyType [T int|float32] T
+  ```
+  
+  这种方式就是错误的
+
+* 当类型约束的一些写法会被编译器误认为是表达式时会报错。如下：
+  
+  ```go
+  
+  //✗ 错误。T *int会被编译器误认为是表达式 T乘以int，而不是int指针
+  type NewType[T *int] []T
+  // 上面代码再编译器眼中：它认为你要定义一个存放切片的数组，数组长度由 T 乘以 int 计算得到
+  type NewType [T * int][]T 
+  
+  //✗ 错误。和上面一样，这里不光*被会认为是乘号，| 还会被认为是按位或操作
+  type NewType2[T *int|*float64] []T 
+  
+  //✗ 错误
+  type NewType2 [T (int)] []T 
+  ```
+  
+  那么为了解决这个问题，可以使用interface{}来消除歧义。如下:
+  
+  ```go
+  type NewType[T interface{*int}] []T
+  type NewType2[T interface{*int|*float64}] []T 
+  // 如果类型约束中只有一个类型，可以添加个逗号消除歧义
+  type NewType3[T *int,] []T
+  //✗ 错误。如果类型约束不止一个类型，加逗号是不行
+  type NewType4[T *int|*float32,] []T 
+  ```
+
+* 泛型和普通的类型一样，可以互相嵌套定义出更加复杂的新类型，如下：
+  
+  ```go
+  
+  // 先定义个泛型类型 Slice[T]
+  type Slice[T int|string|float32|float64] []T
+  
+  // ✗ 错误。泛型类型Slice[T]的类型约束中不包含uint, uint8
+  type UintSlice[T uint|uint8] Slice[T]  
+  
+  // ✓ 正确。基于泛型类型Slice[T]定义了新的泛型类型 FloatSlice[T] 。FloatSlice[T]只接受float32和float64两种类型
+  type FloatSlice[T float32|float64] Slice[T] 
+  
+  // ✓ 正确。基于泛型类型Slice[T]定义的新泛型类型 IntAndStringSlice[T]
+  type IntAndStringSlice[T int|string] Slice[T]  
+  // ✓ 正确 基于IntAndStringSlice[T]套娃定义出的新泛型类型
+  type IntSlice[T int] IntAndStringSlice[T] 
+  
+  // 在map中套一个泛型类型Slice[T]
+  type WowMap[T int|string] map[string]Slice[T]
+  // 在map中套Slice[T]的另一种写法
+  type WowMap2[T Slice[int] | Slice[string]] map[string]T
+  ```
+
+* go的匿名结构体不支持泛型
+  
+  ```go
+  //✗ 错误。匿名结构体不支持泛型
+  testCase := struct[T int|string] {
+          caseName string
+          got      T
+          want     T
+      }[int]{
+          caseName: "test OK",
+          got:      100,
+          want:     100,
+      }
+  ```
+
+## 2. 泛型receiver
+
+定义了新的普通类型之后可以给类型添加方法。那么可以给泛型类型添加方法吗？答案自然是可以的，如下：
+
+```go
+type MySlice[T int | float32] []T
+
+func (s MySlice[T]) Sum() T {
+    var sum T
+    for _, value := range s {
+        sum += value
+    }
+    return sum
+}
+```
+
+那现在，我们可以这样使用了
+
+```go
+var a MySlice[int] = []int{1,2,3}
+print(a.Sum())// 6
+var b MySlice[float32] = []float32{1.0,2.0,3.0}
+print(b.Sum())// 6.0
+```
+
+再有了泛型后，我们就能实现一些通用的数据结构了，例如堆，栈，队列等，这些go的需要import库来实现的类型。当然也可以用接口+反射实现，但是我想没人愿意放着优雅的泛型不用，去用又恶心又性能低下的反射。
+
+下面是使用泛型使用的堆
+
+```go
+type Ordered interface {
+    ~int | ~float64 | ~string // 允许底层类型为 int、float64 或 string 的类型
+}
+
+type Heap[T Ordered] struct {
+    H     []T
+    isMax bool
+}
+
+// 传入一个参数,来确定时大顶堆还是小顶堆
+func Construct[T Ordered](nums []T, isMax ...bool) *Heap[T] {
+    heap := &Heap[T]{H: nums, isMax: true}
+    if len(isMax) > 0 {
+        heap.isMax = isMax[0]
+    }
+    heap.Heapify()
+    return heap
+}
+
+func (h *Heap[T]) siftDown(i int) {
+    // Implementation of siftDown
+    location := i
+    for location <= len(h.H)/2-1 {
+        left := 2*location + 1
+        right := 2*location + 2
+        //这里的判断条件需要 将大顶堆和小顶堆合并，用一套逻辑
+        canChangeL := left < len(h.H) && (h.isMax && h.H[left] > h.H[location] || !h.isMax && h.H[left] < h.H[location])
+        canChangeR := right < len(h.H) && (h.isMax && h.H[right] > h.H[location] || !h.isMax && h.H[right] < h.H[location])
+        if canChangeL && canChangeR {
+            selectL := h.isMax && h.H[left] > h.H[right] || !h.isMax && h.H[left] < h.H[right]
+            if selectL {
+                canChangeR = false
+            } else {
+                canChangeL = false
+            }
+        }
+        if canChangeL && !canChangeR {
+            h.H[location], h.H[left] = h.H[left], h.H[location]
+            location = left
+            continue
+        }
+        if canChangeR && !canChangeL {
+            h.H[location], h.H[right] = h.H[right], h.H[location]
+            location = right
+            continue
+        }
+        break
+    }
+}
+
+func (h *Heap[T]) Heapify() {
+    n := len(h.H)
+    for i := n/2 - 1; i >= 0; i-- {
+        h.siftDown(i)
+    }
+}
+
+func (h *Heap[T]) Insert(value T) {
+    h.H = append(h.H, value)
+    index := len(h.H) - 1
+    for index > 0 {
+        parent := (index - 1) / 2
+        if h.isMax {
+            if h.H[parent] < h.H[index] {
+                h.H[parent], h.H[index] = h.H[index], h.H[parent]
+                index = parent
+            } else {
+                break
+            }
+        } else {
+            if h.H[parent] > h.H[index] {
+                h.H[parent], h.H[index] = h.H[index], h.H[parent]
+                index = parent
+            } else {
+                break
+            }
+        }
+    }
+}
+
+func (h *Heap[T]) ExtractMax() T {
+    if len(h.H) == 0 {
+        var zero T
+        return zero // or some error value
+    }
+    max := h.H[0]
+    h.H[0] = h.H[len(h.H)-1]
+    h.H = h.H[:len(h.H)-1]
+    h.siftDown(0)
+    return max
+}
+```
+
+使用接口的时候经常会用到类型断言或 type swith 来确定接口具体的类型，然后对不同类型做出不同的处理，如：
+
+```go
+var i interface{} = 123
+i.(int) // 类型断言
+
+// type switch
+switch i.(type) {
+    case int:
+        // do something
+    case string:
+        // do something
+    default:
+        // do something
+    }
+}
+```
+
+那么你一定会想到，对于 `valut T` 这样通过类型形参定义的变量，我们能不能判断具体类型然后对不同类型做出不同处理呢？答案是不允许的，如下：
+
+```go
+func (q *Queue[T]) Put(value T) {
+    value.(int) // 错误。泛型类型定义的变量不能使用类型断言
+
+    // 错误。不允许使用type switch 来判断 value 的具体类型
+    switch value.(type) {
+    case int:
+        // do something
+    case string:
+        // do something
+    default:
+        // do something
+    }
+
+    // ...
+}
+```
+
+虽然type switch和类型断言不能用，但我们可通过反射机制达到目的：
+
+```go
+func (receiver Queue[T]) Put(value T) {
+    // Printf() 可输出变量value的类型(底层就是通过反射实现的)
+    fmt.Printf("%T", value) 
+
+    // 通过反射可以动态获得变量value的类型从而分情况处理
+    v := reflect.ValueOf(value)
+
+    switch v.Kind() {
+    case reflect.Int:
+        // do something
+    case reflect.String:
+        // do something
+    }
+
+    // ...
+}
+```
+
+这看起来达到了我们的目的，可是当你写出上面这样的代码时候就出现了一个问题：
+
+你为了避免使用反射而选择了泛型，结果到头来又为了一些功能在在泛型中使用反射
+
+当出现这种情况的时候你可能需要重新思考一下，自己的需求是不是真的需要用泛型（毕竟泛型机制本身就很复杂了，再加上反射的复杂度，增加的复杂度并不一定值得）。
+
+当然，这一切选择权都在你自己的手里，根据具体情况斟酌。
+
+## 3. 泛型函数
+
+在介绍完泛型类型和泛型receiver之后，我们来介绍最后一个可以使用泛型的地方——泛型函数。有了上面的知识，写泛型函数也十分简单。假设我们想要写一个计算两个数之和的函数：
+
+```go
+func Add[T int|float32|float64|string](a, b T) T{
+    return a + b
+}
+```
+
+上面就是泛型函数的定义。
+
+> 这种带类型形参的函数被称为**泛型函数**
+
+它和普通函数的点不同在于函数名之后带了类型形参。这里的类型形参的意义、写法和用法因为与泛型类型是一模一样的，就不再赘述了。
+
+和泛型类型一样，泛型函数也是不能直接调用的，要使用泛型函数的话必须传入类型实参之后才能调用。
+
+```go
+Add[int](1,2) // 传入类型实参int，计算结果为 3
+Add[float32](1.0, 2.0) // 传入类型实参float32, 计算结果为 3.0
+Add[string]("hello", "world") // 错误。因为泛型函数Add的类型约束中并不包含string
+```
+
+Go同时支持类型实参的自动推导：
+
+```go
+Add(1, 2)  // 1，2是int类型，编译请自动推导出类型实参T是int
+Add(1.0, 2.0) // 1.0, 2.0 是浮点，编译请自动推导出类型实参T是float32
+```
+
+我们想到，在匿名的结构体中不支持泛型，那匿名函数是不是也不支持呢？恭喜你猜对了，匿名函数也不支持泛型:
+
+```go
+// 错误，匿名函数不能自己定义类型实参
+fnGeneric := func[T int | float32](a, b T) T {
+        return a + b
+} 
+
+fmt.Println(fnGeneric(1, 2))
+```
+
+但是匿名函数可以使用别处定义好的类型实参，如：
+
+```go
+func MyFunc[T int | float32 | float64](a, b T) {
+
+    // 匿名函数可使用已经定义好的类型形参
+    fn2 := func(i T, j T) T {
+        return i*2 - j*2
+    }
+
+    fn2(a, b)
+}
+```
+
+那么支不支持泛型方法呢？很不幸，目前Go的方法并不支持泛型，如下：
+
+```go
+type A struct {
+}
+
+// 不支持泛型方法
+func (receiver A) Add[T int | float32 | float64](a T, b T) T {
+    return a + b
+}
+```
+
+但是因为receiver支持泛型， 所以如果想在方法中使用泛型的话，目前唯一的办法就是曲线救国，迂回地通过receiver使用类型形参：
+
+```go
+type A[T int | float32 | float64] struct {
+}
+
+// 方法可以使用类型定义中的形参 T 
+func (receiver A[T]) Add(a T, b T) T {
+    return a + b
+}
+
+// 用法：
+var a A[int]
+a.Add(1, 2)
+
+var aa A[float32]
+aa.Add(1.0, 2.0)
+```
+
+这很有go的特点，既然receiver支持泛型了，那方法就不支持了，less is more。
+
 

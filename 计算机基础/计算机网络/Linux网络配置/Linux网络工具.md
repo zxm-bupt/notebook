@@ -116,3 +116,4 @@ Netplan 是一个网络配置抽象工具，它通过 YAML 格式的配置文件
 * 为 NetworkManager 生成 .nmconnection 文件。
 
 通过 netplan apply 命令将配置传递给后端，后端再与内核交互。
+
