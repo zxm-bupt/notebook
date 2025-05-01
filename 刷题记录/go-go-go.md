@@ -835,4 +835,528 @@ aa.Add(1.0, 2.0)
 
 这很有go的特点，既然receiver支持泛型了，那方法就不支持了，less is more。
 
+## 4. 泛型中的interface{}
+
+### 4.1 interface{}样式的类型约束
+
+go的泛型约束有时会写的很长，这显然不方便阅读(其实方便写，因为AI会自动补全)。因此，可以将类型约束封装成一个接口。其实我觉的go的interface{}不应该称之为接口，更应该是一种类型。他和其他语言的接口定义显然不太相似，或者说他的定义更像是java接口的超集。例如下面常见的go的接口
+
+```go
+type MyInterface interface{
+    Work()
+    Relax()
+}
+```
+
+这就可以理解成，MyInterface是一种类型，一种实现了Work()和Relax()方法的类型，这种理解方式，要比单纯的理解成接口要好的多。也更符合less is more的设计理念。
+
+回到泛型上来，对于如下的类型约束，可以这样定义：
+
+```go
+// 一个可以容纳所有int,uint以及浮点类型的泛型切片
+type Slice[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64] []T
+```
+
+```go
+type IntUintFloat interface {
+    int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
+}
+
+type Slice[T IntUintFloat] []T
+```
+
+不过这样的代码依旧不好维护，而接口和接口、接口和普通类型之间也是可以通过 `|` 进行组合：
+
+```go
+type Int interface {
+    int | int8 | int16 | int32 | int64
+}
+
+type Uint interface {
+    uint | uint8 | uint16 | uint32
+}
+
+type Float interface {
+    float32 | float64
+}
+
+type Slice[T Int | Uint | Float] []T  // 使用 '|' 将多个接口类型组合
+```
+
+上面的代码中，我们分别定义了 Int, Uint, Float 三个接口类型，并最终在 Slice[T] 的类型约束中通过使用 `|` 将它们组合到一起。
+
+同时，在接口里也能直接组合其他接口，所以还可以像下面这样：
+
+```go
+type SliceElement interface {
+    Int | Uint | Float | string // 组合了三个接口类型并额外增加了一个 string 类型
+}
+
+type Slice[T SliceElement] []T 
+```
+
+得益于go自身的缺点，我们还需要解决如下一个问题：
+
+```go
+var s1 Slice[int] // 正确 
+
+type MyInt int
+var s2 Slice[MyInt] // ✗ 错误。MyInt类型底层类型是int但并不是int类型，不符合 Slice[T] 的类型约束
+```
+
+显然MyInt是int类型，但是MyInt却不能作为Slice的类型实参。这说明，go的类型系统比较抽象。为了解决这个问题，go引入`~`，上面的问题我们可以这样解决：
+
+```go
+type Int interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64
+}
+
+type Uint interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32
+}
+type Float interface {
+    ~float32 | ~float64
+}
+
+type Slice[T Int | Uint | Float] []T 
+
+var s Slice[int] // 正确
+
+type MyInt int
+var s2 Slice[MyInt]  // MyInt底层类型是int，所以可以用于实例化
+
+type MyMyInt MyInt
+var s3 Slice[MyMyInt]  // 正确。MyMyInt 虽然基于 MyInt ，但底层类型也是int，所以也能用于实例化
+
+type MyFloat32 float32  // 正确
+var s4 Slice[MyFloat32]
+```
+
+`~`表示就代表着不光是 int ，所有以 int 为底层类型的类型也都可用于实例化。但是`~`也有一些限制：
+
+* ~后面的类型不能为接口
+
+* ~后面的类型必须为基本类型
+
+嗯，这太符合go了。
+
+go提供了两个内置的类型约束接口comparable
+
+comparable表示支持`!=`和`==`操作，例如：
+
+```go
+// 错误。因为 map 中键的类型必须是可进行 != 和 == 比较的类型
+type MyMap[KEY any, VALUE any] map[KEY]VALUE
+type MyMap[KEY comparable, VALUE any] map[KEY]VALUE // 正确 
+```
+
+但是comparable不代表支持`> < >= <= `，这几个运算符表述为orderd，但是orderd不在go内置的，因此如果要用，需要自己实现一个，例如：
+
+```go
+// Ordered 代表所有可比大小排序的类型
+type Ordered interface {
+    Integer | Float | ~string
+}
+
+type Integer interface {
+    Signed | Unsigned
+}
+
+type Signed interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64
+}
+
+type Unsigned interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+}
+
+type Float interface {
+    ~float32 | ~float64
+}
+```
+
+### 4.2 Interface的理解
+
+> 其实我觉的go的interface{}不应该称之为接口，更应该是一种类型。他和其他语言的接口定义显然不太相似，或者说他的定义更像是java接口的超集。例如下面常见的go的接口
+
+现在我们再来看这个定义。在go1.18版本之后，go的interface{}的定义发生了如下的变化：
+
+go version < 1.18
+
+> An interface type specifies a **method set** called its interface
+
+go version ≥ 1.18
+
+> An interface type defines a **type set**
+
+go的interface从方法集到类型集。
+
+既然接口定义发生了变化，那么从Go1.18开始 `接口实现(implement)` 的定义自然也发生了变化：
+
+当满足以下条件时，我们可以说 **类型 T 实现了接口 I ( type T implements interface I)**：
+
+* T 不是接口时：类型 T 是接口 I 代表的类型集中的一个成员 (T is an element of the type set of I)
+* T 是接口时： T 接口代表的类型集是 I 代表的类型集的子集(Type set of T is a subset of the type set of I)
+
+既然是interface{}是集合，那么就有元素的交和并，例如：
+
+```go
+type AllInt interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint32
+}
+
+type Uint interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+type A interface { // 接口A代表的类型集是 AllInt 和 Uint 的交集
+    AllInt
+    Uint
+}
+
+type B interface { // 接口B代表的类型集是 AllInt 和 ~int 的交集
+    AllInt
+    ~int
+}type AllInt interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint32
+}
+
+type Uint interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+type A interface { // 接口A代表的类型集是 AllInt 和 Uint 的交集
+    AllInt
+    Uint
+}
+
+type B interface { // 接口B代表的类型集是 AllInt 和 ~int 的交集
+    AllInt
+    ~int
+}
+```
+
+上面这个例子中
+
+* 接口 A 代表的是 AllInt 与 Uint 的 交集，即 ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+
+* 接口 B 代表的则是 AllInt 和 ~int 的交集，即 ~int
+
+既然interface{}代表了类型集合，那么interface{}是否代表空集合呢，显然不是的，interface{}我们知道是代表全部类型集合，嗯，这显然是因为interface{}是1.18版本之前就存在的，但是修改了interface的定义后，interface{}出现了歧义，那么解决方案是什么呢，一个新的关键字any代替了了interface{}，any成为了interface{}的alias，any就没有歧义了。太棒了，真是一个工工又程程的修改方式。 
+
+### 4.3 接口的两种类型
+
+看下面这个例子
+
+```go
+type ReadWriter interface {
+    ~string | ~[]rune
+
+    Read(p []byte) (n int, err error)
+    Write(p []byte) (n int, err error)
+}
+// 类型 StringReadWriter 实现了接口 Readwriter
+type StringReadWriter string 
+
+func (s StringReadWriter) Read(p []byte) (n int, err error) {
+    // ...
+}
+
+func (s StringReadWriter) Write(p []byte) (n int, err error) {
+ // ...
+}
+
+//  类型BytesReadWriter 没有实现接口 Readwriter
+type BytesReadWriter []byte 
+
+func (s BytesReadWriter) Read(p []byte) (n int, err error) {
+ ...
+}
+
+func (s BytesReadWriter) Write(p []byte) (n int, err error) {
+ ...
+}
+```
+
+只有既满足类型约束还要实现对应的方法的才是实现了接口。为了解决这个问题也为了保持Go语言的兼容性，Go1.18开始将接口分为了两种类型
+
+* 基本接口
+
+* 一般接口
+
+接口定义中如果只有方法的话，那么这种接口被称为**基本接口(Basic interface)**。这种接口就是Go1.18之前的接口，用法也基本和Go1.18之前保持一致。基本接口大致可以用于如下几个地方：
+
+```go
+type MyError interface { // 接口中只有方法，所以是基本接口
+    Error() string
+}
+
+// 用法和 Go1.18之前保持一致
+var err MyError = fmt.Errorf("hello world")
+// io.Reader 和 io.Writer 都是基本接口，也可以用在类型约束中
+type MySlice[T io.Reader | io.Writer]  []Slice
+```
+
+* 最常用的，定义接口变量并赋值
+* 基本接口因为也代表了一个类型集，所以也可用在类型约束中
+
+如果接口内不光只有方法，还有类型的话，这种接口被称为 **一般接口(General interface)** ，如下例子都是一般接口：
+
+```go
+type Uint interface { // 接口 Uint 中有类型，所以是一般接口
+    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+type ReadWriter interface {  // ReadWriter 接口既有方法也有类型，所以是一般接口
+    ~string | ~[]rune
+
+    Read(p []byte) (n int, err error)
+    Write(p []byte) (n int, err error)
+}
+```
+
+一般接口类型不能用来定义变量，只能用于泛型的类型约束中。所以以下的用法是错误的：
+
+```go
+type Uint interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+var uintInf Uint // 错误。Uint是一般接口，只能用于类型约束，不得用于变量定义
+// 当然也不支持作为函数形参
+type MyInterface interface {
+    int | string
+    Add()
+    Print()
+}
+
+func Hello(a MyInterface) {
+    a.Add()
+    a.Print()
+}
+
+```
+
+这一限制保证了一般接口的使用被限定在了泛型之中，不会影响到Go1.18之前的代码，同时也极大减少了书写代码时的心智负担，太抽象了这个解决方案。
+
+### 4.4 接口定义中的泛型
+
+所有类型的定义中都可以使用类型形参，所以接口定义自然也可以使用类型形参，观察下面这两个例子：
+
+```go
+type DataProcessor[T any] interface {
+    Process(oriData T) (newData T)
+    Save(data T) error
+}
+
+type DataProcessor2[T any] interface {
+    int | ~struct{ Data interface{} }
+
+    Process(data T) (newData T)
+    Save(data T) error
+}
+```
+
+因为引入了类型形参，所以这两个接口是泛型类型。而泛型类型要使用的话必须传入类型实参实例化才有意义。所以我们来尝试实例化一下这两个接口。因为 T 的类型约束是 any，所以可以随便挑一个类型来当实参(比如string)：
+
+```go
+DataProcessor[string]
+
+// 实例化之后的接口定义相当于如下所示：
+type DataProcessor[string] interface {
+    Process(oriData string) (newData string)
+    Save(data string) error
+}
+```
+
+这是一个基本类型接口
+
+```go
+DataProcessor2[string]
+
+// 实例化后的接口定义可视为
+type DataProcessor2[T string] interface {
+    int | ~struct{ Data interface{} }
+
+    Process(data string) (newData string)
+    Save(data string) error
+}
+```
+
+这是一个一般类型接口，所以实例化之后的这个接口代表的意思是：
+
+1. 只有实现了 `Process(string) string` 和 `Save(string) error` 这两个方法，并且以 `int` 或 `struct{ Data interface{} }` 为底层类型的类型才算实现了这个接口
+2. **一般接口(General interface)** 不能用于变量定义只能用于类型约束，所以接口 `DataProcessor2[string]` 只是定义了一个用于类型约束的类型集
+
+```go
+// XMLProcessor 虽然实现了接口 DataProcessor2[string] 的两个方法，但是因为它的底层类型是 []byte，所以依旧是未实现 DataProcessor2[string]
+type XMLProcessor []byte
+
+func (c XMLProcessor) Process(oriData string) (newData string) {
+
+}
+
+func (c XMLProcessor) Save(oriData string) error {
+
+}
+
+// JsonProcessor 实现了接口 DataProcessor2[string] 的两个方法，同时底层类型是 struct{ Data interface{} }。所以实现了接口 DataProcessor2[string]
+type JsonProcessor struct {
+    Data interface{}
+}
+
+func (c JsonProcessor) Process(oriData string) (newData string) {
+
+}
+
+func (c JsonProcessor) Save(oriData string) error {
+
+}
+
+// 错误。DataProcessor2[string]是一般接口不能用于创建变量
+var processor DataProcessor2[string]
+
+// 正确，实例化之后的 DataProcessor2[string] 可用于泛型的类型约束
+type ProcessorList[T DataProcessor2[string]] []T
+
+// 正确，接口可以并入其他接口
+type StringProcessor interface {
+    DataProcessor2[string]
+
+    PrintString()
+}
+
+// 错误，带方法的一般接口不能作为类型并集的成员(参考4.5接口定义的种种限制规则
+type StringProcessor interface {
+    DataProcessor2[string] | DataProcessor2[[]byte]
+
+    PrintString()
+}
+```
+
+### 4.5  接口的种种限制
+
+1. 用 `|` 连接多个类型的时候，类型之间不能有相交的部分(即必须是不交集):
+   
+   ```go
+    type MyInt int
+    // 错误，MyInt的底层类型是int,和 ~int 有相交的部分
+    type _ interface {
+      ~int | MyInt
+    }
+   ```
+   
+   但是相交的类型中是接口的话，则不受这一限制：
+   
+   ```go
+   type MyInt int
+   
+   type _ interface {
+       ~int | interface{ MyInt }  // 正确
+   }
+   
+   type _ interface {
+       interface{ ~int } | MyInt // 也正确
+   }
+   
+   type _ interface {
+       interface{ ~int } | interface{ MyInt }  // 也正确
+   }
+   ```
+
+2. 类型的并集中不能有类型形参
+   
+   ```go
+   type MyInf[T ~int | ~string] interface {
+    ~float32 | T  // 错误。T是类型形参
+    }
+   
+    type MyInf2[T ~int | ~string] interface {
+        T  // 错误
+    }
+   ```
+
+3. 接口不能直接或间接地并入自己
+   
+   ```go
+   type Bad interface {
+       Bad // 错误，接口不能直接并入自己
+   }
+   
+   type Bad2 interface {
+       Bad1
+   }
+   type Bad1 interface {
+       Bad2 // 错误，接口Bad1通过Bad2间接并入了自己
+   }
+   
+   type Bad3 interface {
+       ~int | ~string | Bad3 // 错误，通过类型的并集并入了自己
+   }
+   ```
+
+4. 接口的并集成员个数大于一的时候不能直接或间接并入 `comparable` 接口，不知道为什么，很天才的想法，我猜是因为comparable是给编译器看的，如果支持的话，编译器比较难写
+   
+   ```go
+   type OK interface {
+       comparable // 正确。只有一个类型的时候可以使用 comparable
+   }
+   
+   type Bad1 interface {
+       []int | comparable // 错误，类型并集不能直接并入 comparable 接口
+   }
+   
+   type CmpInf interface {
+       comparable
+   }
+   type Bad2 interface {
+       chan int | CmpInf  // 错误，类型并集通过 CmpInf 间接并入了comparable
+   }
+   type Bad3 interface {
+       chan int | interface{comparable}  // 理所当然，这样也是不行的
+   }
+   ```
+
+5. 带方法的接口(无论是基本接口还是一般接口)，都不能写入接口的并集中：带方法的接口(无论是基本接口还是一般接口)，都不能写入接口的并集中：
+   
+   ```go
+   type _ interface {
+       ~int | ~string | error // 错误，error是带方法的接口(一般接口) 不能写入并集中
+   }
+   
+   type DataProcessor[T any] interface {
+       ~string | ~[]byte
+   
+       Process(data T) (newData T)
+       Save(data T) error
+   }
+   
+   // 错误，实例化之后的 DataProcessor[string] 是带方法的一般接口，不能写入类型并集
+   type _ interface {
+       ~int | ~string | DataProcessor[string] 
+   }
+   
+   type Bad[T any] interface {
+       ~int | ~string | DataProcessor[T]  // 也不行
+   }
+   
+   
+   // 错误，间接引入也不可以
+   type MyInterface interface {
+   	int | string
+   	Add()
+   	Print()
+   }
+   
+   type shell interface {
+   	MyInterface
+   }
+   
+   type MyInt interface {
+   	~int | shell
+   }
+   ```
+
+
+
 
