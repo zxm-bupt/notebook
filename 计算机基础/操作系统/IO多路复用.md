@@ -82,3 +82,98 @@ epoll的主要优点如下：
 条件触发是指只要事件状态保持满足某种条件，就会持续触发。在I/O多路复用中，条件触发意味着只要某个文件描述符的I/O事件状态满足条件（如可读或可写），我们就会不断收到通知。
 
 条件触发的优点是它可以确保我们不会遗漏任何事件，因为只要条件满足，就会持续触发。然而，条件触发的缺点是它可能导致大量的事件通知，从而增加处理开销。
+
+# 3. select详解
+
+假如能够预先传入一个socket列表，如果列表中的socket都没有数据，挂起进程，直到有一个socket收到数据，唤醒进程。这种方法很直接，也是select的设计思想。
+
+为方便理解，我们先复习select的用法。在如下的代码中，先准备一个数组（下面代码中的fds），让fds存放着所有需要监视的socket。然后调用select，如果fds中的所有socket都没有数据，select会阻塞，直到有一个socket接收到数据，select返回，唤醒进程。用户可以遍历fds，通过FD_ISSET判断具体哪个socket收到数据，然后做出处理。
+
+```c
+int s = socket(AF_INET, SOCK_STREAM, 0);  
+bind(s, ...)
+listen(s, ...)
+
+int fds[] =  存放需要监听的socket
+
+while(1){
+    int n = select(..., fds, ...)
+    for(int i=0; i < fds.count; i++){
+        if(FD_ISSET(fds[i], ...)){
+            //fds[i]的数据处理
+        }
+    }
+}
+```
+
+select的实现思路很直接。假如程序同时监视如下图的sock1、sock2和sock3三个socket，那么在调用select之后，操作系统把进程A分别加入这三个socket的等待队列中。
+
+![](http://123.57.190.49:12121/api/image/RVL4BD04.png)
+
+当任何一个socket收到数据后，中断程序将唤起进程。下图展示了sock2接收到了数据的处理流程。
+
+ps：recv和select的中断回调可以设置成不同的内容。
+
+![](http://123.57.190.49:12121/api/image/82F8NJFJ.png)
+
+经由这些步骤，当进程A被唤醒后，它知道至少有一个socket接收了数据。程序只需遍历一遍socket列表，就可以得到就绪的socket。
+
+![](http://123.57.190.49:12121/api/image/6N80N8L2.png)
+
+这种简单方式行之有效，在几乎所有操作系统都有对应的实现。
+
+# 4. epoll详解
+
+## 4.1 select低效的原因
+
+1. 将“维护等待队列”和“阻塞进程”两个步骤合二为一。每次调用select时，都需要执行系统调用，阻塞进程。
+
+2. 程序不知道哪些socket收到数据，只能一个个遍历。如果内核维护一个“就绪列表”，引用收到数据的socket，就能避免遍历。
+
+## 4.2 epoll的改进
+
+epoll将这两个操作“维护等待队列”和“阻塞进程”分开，先用epoll_ctl维护等待队列，再调用epoll_wait阻塞进程。显而易见的，效率就能得到提升。
+
+```c
+int s = socket(AF_INET, SOCK_STREAM, 0);   
+bind(s, ...)
+listen(s, ...)
+
+int epfd = epoll_create(...);
+epoll_ctl(epfd, ...); //将所有需要监听的socket添加到epfd中
+
+while(1){
+    int n = epoll_wait(...)
+    for(接收到数据的socket){
+        //处理
+    }
+}
+```
+
+## 4.3 epoll的原理和流程
+
+如下图所示，当某个进程调用epoll_create方法时，内核会创建一个eventpoll对象（也就是程序中epfd所代表的对象）。eventpoll对象也是文件系统中的一员，和socket一样，它也会有等待队列。 创建一个代表该epoll的eventpoll对象是必须的，因为内核要维护“就绪列表”等数据，“就绪列表”可以作为eventpoll的成员。
+
+![](http://123.57.190.49:12121/api/image/FB62XR80.png)
+
+创建epoll对象后，可以用epoll_ctl添加或删除所要监听的socket。以添加socket为例，如下图，如果通过epoll_ctl添加sock1、sock2和sock3的监视，内核会将eventpoll添加到这三个socket的等待队列中。当socket收到数据后，中断程序会操作eventpoll对象，而不是直接操作进程。
+
+当socket收到数据后，中断程序会给eventpoll的“就绪列表”添加socket引用。如下图展示的是sock2和sock3收到数据后，中断程序让rdlist引用这两个socket。
+
+![](http://123.57.190.49:12121/api/image/68844640.png)
+
+eventpoll对象相当于是socket和进程之间的中介，socket的数据接收并不直接影响进程，而是通过改变eventpoll的就绪列表来改变进程状态。
+
+当程序执行到epoll_wait时，如果rdlist已经引用了socket，那么epoll_wait直接返回，如果rdlist为空，阻塞进程。
+
+假设计算机中正在运行进程A和进程B，在某时刻进程A运行到了epoll_wait语句，此时epoll为空。如下图所示，内核会将进程A放入eventpoll的等待队列中，阻塞进程。
+
+![](http://123.57.190.49:12121/api/image/48Z2N840.png)
+
+当socket接收到数据，中断程序一方面修改rdlist，另一方面唤醒eventpoll等待队列中的进程，进程A再次进入运行状态（如下图）。也因为rdlist的存在，进程A可以知道哪些socket发生了变化。
+
+![](http://123.57.190.49:12121/api/image/TDZJ6D6D.png)
+
+
+
+
