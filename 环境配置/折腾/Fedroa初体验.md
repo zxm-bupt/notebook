@@ -42,8 +42,11 @@ HandleLidSwitchDocked=ignore
 
 重启systemd-logind service，cosmic崩溃了，不过问题不大，重启桌面，解决问题，不会自动suspend了。
 
+dnf唯一的缺点是没有autoremove，如果要删除多余内核。只能
+
+```shell
+rpm -qa | grep kernel
+sudo dnf remove xxxx
+```
+
 小节，Fedora是真不喜欢提供额外的配置，想用什么，麻烦自己查询资料，不过确实比Ubuntu干净。没有乱七八糟的配置文件，dnf比apt好用的多。Cosmic目前不太适合当主力DE，感觉还有一些不稳定，不过平铺布局真的舒服。
-
-
-
-
