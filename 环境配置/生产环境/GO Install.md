@@ -9,5 +9,3 @@ echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
 echo 'export GO111MODULE=auto' >> ~/.bashrc 
 source ~/.bashrc
 ```
-
-
