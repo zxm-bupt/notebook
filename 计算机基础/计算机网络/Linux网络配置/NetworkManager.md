@@ -9,32 +9,29 @@ NetworkManager 是一个在 Linux 和其他类 Unix 操作系统上用于简化�
 NetworkManager 的一些关键特性和作用：
 
 1. **自动检测和连接**：NetworkManager 能够自动检测可用的网络接口（如以太网卡、Wi-Fi 适配器）和网络（如可用的 Wi-Fi 热点）。它可以配置为自动连接到已知的或首选的网络，无需用户手动干预。
-
 2. **支持多种网络类型**：
-   
-   * **有线网络 (Ethernet)**：管理以太网连接，支持 DHCP 或静态 IP 配置。
-   * **无线网络 (Wi-Fi)**：管理 Wi-Fi 连接，支持各种安全协议（WEP, WPA/WPA2/WPA3 Personal/Enterprise）。
-   * **移动宽带**：通过相应的硬件（如 USB 调制解调器）管理 3G, 4G LTE, 5G 等蜂窝网络连接。
-   * **VPN**：通过插件支持多种 VPN 协议，如 OpenVPN, IPsec (strongSwan, libreswan), WireGuard, PPTP 等。
-   * **其他**：还支持 DSL/PPPoE、网络绑定 (Bonding)、网络桥接 (Bridging)、VLAN 等高级网络配置。
+
+   - **有线网络 (Ethernet)**：管理以太网连接，支持 DHCP 或静态 IP 配置。
+   - **无线网络 (Wi-Fi)**：管理 Wi-Fi 连接，支持各种安全协议（WEP, WPA/WPA2/WPA3 Personal/Enterprise）。
+   - **移动宽带**：通过相应的硬件（如 USB 调制解调器）管理 3G, 4G LTE, 5G 等蜂窝网络连接。
+   - **VPN**：通过插件支持多种 VPN 协议，如 OpenVPN, IPsec (strongSwan, libreswan), WireGuard, PPTP 等。
+   - **其他**：还支持 DSL/PPPoE、网络绑定 (Bonding)、网络桥接 (Bridging)、VLAN 等高级网络配置。
 
 3. **用户界面**：
-   
-   * **图形界面 (GUI)**：通常与桌面环境集成，提供系统托盘图标（如 `nm-applet`）和设置面板，让用户可以方便地查看网络状态、选择 Wi-Fi 网络、输入密码、配置 VPN 等。`nm-connection-editor` 是一个常用的图形化连接编辑器。
-   * **文本用户界面 (TUI)**：提供 `nmtui` 命令，这是一个在终端中运行的基于文本菜单的界面，方便在没有图形环境的情况下进行配置。
-   * **命令行界面 (CLI)**：提供强大的 `nmcli` 命令，允许用户通过命令行查看状态、管理设备和连接，非常适合脚本自动化和高级用户。
+
+   - **图形界面 (GUI)**：通常与桌面环境集成，提供系统托盘图标（如 `nm-applet`）和设置面板，让用户可以方便地查看网络状态、选择 Wi-Fi 网络、输入密码、配置 VPN 等。`nm-connection-editor` 是一个常用的图形化连接编辑器。
+   - **文本用户界面 (TUI)**：提供 `nmtui` 命令，这是一个在终端中运行的基于文本菜单的界面，方便在没有图形环境的情况下进行配置。
+   - **命令行界面 (CLI)**：提供强大的 `nmcli` 命令，允许用户通过命令行查看状态、管理设备和连接，非常适合脚本自动化和高级用户。
 
 4. **连接配置文件管理**：将每个网络连接的配置（如 SSID、密码、IP 设置、VPN 参数等）保存为“连接配置文件”（通常存储在 `/etc/NetworkManager/system-connections/` 目录下），方便管理和重用。
-
 5. **系统集成**：通过 D-Bus 系统消息总线与其他系统服务和应用程序通信，允许它们查询网络状态或请求网络操作。
-
 6. **多连接管理**：可以同时管理多个活动的网络连接，例如，可以同时连接到有线网络和 VPN。
-   
-   
 
 # 2. CLI命令介绍
 
 NetworkManager将链接和设备分开，也就是connection是一套配置，device是一套配置，NetworkManager可以将connection的配置添加到device上，从而使设备增加链接。
+
+`nmcli dev` 关注的是**设备在当前时刻的行为和状态**，而 `nmcli connection` 关注的是**网络的长期配置**
 
 NetworkManager的CLI为nmcli nmcli的常见操作如下：
 
@@ -81,15 +78,41 @@ wifi-sec.key-mgmt wpa-eap \
 802-1x.password <PASSWORD>
 ```
 
+上面的链接方案是链接WPA-EAP加密的wifi的。如果要链接正常的WPA-1或者WPA-2认证的WIFI可以使用如下配置
+
+```shell
+nmcli connection add \
+type wifi \
+con-name <CONNECTION NAME> \
+ifname <INTERFACE NAME> \
+ssid <SSID> \
+wifi-sec.key-mgmt wpa-psk \
+wifi-sec.psk <password> 
+```
+
+当然还有更快的链接方式
+
+```shell
+nmcli dev wifi connect <SSID> password <Password>
+```
+
+## 2.3 删除链接
+
+```shell
+nmcli connect del <connection name>|<connection ID>
+```
+
+## 2.4 激活链接
+
+```shell
+nmcli connect up <connection name>|<connection ID>
+```
+
 # 3. 配置文件介绍
 
 NetworkManager的主配置文件`/etc/NetworkManager/NetworkManager.conf`,此文件可用于配置 NetworkManager 的行为。
 
 Connection的文件在`/etc/NetworkManager/system-connections/`中
-
-
-
-
 
 # 参考
 
